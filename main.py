@@ -3,26 +3,6 @@ import numpy as np
 from sklearn.cluster import KMeans
 from PIL.ExifTags import TAGS
 
-# def get_dominant_colors(image_path, k=6):
-#     """Extract the k most dominant colors and their counts from an image using K-Means clustering."""
-#     image = Image.open(image_path).convert("RGB")
-#     image_np = np.array(image)
-#     pixels = image_np.reshape(-1, 3)
-
-#     kmeans = KMeans(n_clusters=k, n_init=10)
-#     kmeans.fit(pixels)
-
-#     # Get the cluster centers (dominant colors) and the pixel counts for each cluster
-#     dominant_colors = kmeans.cluster_centers_.astype(int)
-#     labels, counts = np.unique(kmeans.labels_, return_counts=True)
-    
-#     # Sort by descending frequency
-#     sorted_indices = np.argsort(-counts)
-#     sorted_colors = dominant_colors[sorted_indices]
-#     sorted_counts = counts[sorted_indices]
-
-#     return sorted_colors, sorted_counts
-
 def get_dominant_colors(image_path, k=6, resize_dim=(200, 200)):
     """Extract the k most dominant colors and their counts from an image using K-Means clustering.
        Optionally downscale the image to `resize_dim` for faster processing."""
@@ -49,7 +29,6 @@ def get_dominant_colors(image_path, k=6, resize_dim=(200, 200)):
 
     return sorted_colors, sorted_counts
 
-
 def get_exif_data(image_path):
     """Extract and format selected EXIF data from an image."""
     image = Image.open(image_path)
@@ -57,15 +36,18 @@ def get_exif_data(image_path):
     if not exif_data:
         print("No EXIF data found in the image.")
         return None
-    
+
+    # Map the EXIF tag numbers to their names
     exif_dict = {TAGS.get(tag, tag): value for tag, value in exif_data.items()}
+
+    # Extract the fields you care about
     aperture = exif_dict.get("FNumber", "Unknown")
     iso = exif_dict.get("ISOSpeedRatings", "Unknown")
     shutter_speed = exif_dict.get("ExposureTime", "Unknown")
     camera = exif_dict.get("Model", "Unknown")
     lens = exif_dict.get("LensModel", "Unknown")
     
-    # Format shutter speed if it's a tuple
+    # Format shutter speed if it's stored as a tuple (e.g., (1, 125) for 1/125 sec)
     if isinstance(shutter_speed, tuple):
         shutter_speed = f"{shutter_speed[0]}/{shutter_speed[1]} sec"
     
@@ -125,13 +107,24 @@ def create_combined_image(image_path, k=6):
     
     # Draw the EXIF data text below the color swatches
     if exif_data:
+        # Scale the font size based on the smaller dimension of the original image
+        smaller_dim = min(width, height)
+        font_size = int(smaller_dim * 0.08)  # 8% of the smaller dimension
+        font_size = max(60, font_size)       # Ensures a minimum size of 60
+        
+        # Attempt to load arial.ttf, then DejaVuSans.ttf, else load_default()
         try:
-            font = ImageFont.truetype("arial.ttf", 18)
-        except Exception:
-            font = ImageFont.load_default()
+            font = ImageFont.truetype("arial.ttf", font_size)
+        except OSError:
+            try:
+                font = ImageFont.truetype("DejaVuSans.ttf", font_size)
+            except OSError:
+                print("Warning: Could not find a TrueType font. Falling back to default.")
+                font = ImageFont.load_default()
+        
         text_x = border_width
         text_y = swatch_y_start + swatch_area_height + int(border_width * 0.5)
-        line_spacing = 25
+        line_spacing = int(font_size * 1.3)  # Increase spacing for readability
         for key, value in exif_data.items():
             draw.text((text_x, text_y), f"{key}: {value}", fill="black", font=font)
             text_y += line_spacing
@@ -140,9 +133,7 @@ def create_combined_image(image_path, k=6):
     new_image.save("final_output.jpg")
     new_image.show()
 
-# Path to your image file
-# query user for image path
-
+# Query user for the image path
 image_path = input("Enter the path to your image file: ")
 
 # Create and display the combined image with the desired modifications
