@@ -2,6 +2,7 @@ from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from sklearn.cluster import KMeans
 from PIL.ExifTags import TAGS
+from fractions import Fraction
 
 def get_dominant_colors(image_path, k=6, resize_dim=(200, 200)):
     """Extract the k most dominant colors and their counts from an image using K-Means clustering.
@@ -47,9 +48,16 @@ def get_exif_data(image_path):
     camera = exif_dict.get("Model", "Unknown")
     lens = exif_dict.get("LensModel", "Unknown")
     
-    # Format shutter speed if it's stored as a tuple (e.g., (1, 125) for 1/125 sec)
+    # Format shutter speed to display as a fraction
     if isinstance(shutter_speed, tuple):
+        # Assume tuple is like (numerator, denominator)
         shutter_speed = f"{shutter_speed[0]}/{shutter_speed[1]} sec"
+    elif isinstance(shutter_speed, float):
+        # Convert float to a fraction
+        frac = Fraction(shutter_speed).limit_denominator()
+        shutter_speed = f"{frac.numerator}/{frac.denominator} sec"
+    else:
+        shutter_speed = shutter_speed  # Leave as is if it's a string or other type
     
     return {
         "Aperture": f"f/{aperture}" if aperture != "Unknown" else "Unknown",
@@ -73,7 +81,7 @@ def create_combined_image(image_path, k=6):
     # Define border and extra space sizes
     border_width = int(width * 0.1)         # Left/right margin (10% of image width)
     spacing_between = 200                   # Extra space (in pixels) between the image and swatches
-    swatch_area_height = int(height * 0.12)   # Height for the color swatches
+    swatch_area_height = int(height * 0.08)   # Height for the color swatches
     exif_area_height = int(height * 0.2)      # Height for EXIF text
 
     new_width = width + 2 * border_width
@@ -105,26 +113,18 @@ def create_combined_image(image_path, k=6):
     # Retrieve EXIF data (if available)
     exif_data = get_exif_data(image_path)
     
-    # Draw the EXIF data text below the color swatches
+    # Draw the EXIF data text below the color swatches with font size scaling based on image width
     if exif_data:
-        # Scale the font size based on the smaller dimension of the original image
-        smaller_dim = min(width, height)
-        font_size = int(smaller_dim * 0.08)  # 8% of the smaller dimension
-        font_size = max(60, font_size)       # Ensures a minimum size of 60
-        
-        # Attempt to load arial.ttf, then DejaVuSans.ttf, else load_default()
         try:
+            # Scale font size relative to image width; adjust multiplier as needed.
+            font_size = max(30, int(width * 0.03))
             font = ImageFont.truetype("arial.ttf", font_size)
-        except OSError:
-            try:
-                font = ImageFont.truetype("DejaVuSans.ttf", font_size)
-            except OSError:
-                print("Warning: Could not find a TrueType font. Falling back to default.")
-                font = ImageFont.load_default()
+        except Exception:
+            font = ImageFont.load_default()
         
         text_x = border_width
         text_y = swatch_y_start + swatch_area_height + int(border_width * 0.5)
-        line_spacing = int(font_size * 1.3)  # Increase spacing for readability
+        line_spacing = int(font_size * 1.2)
         for key, value in exif_data.items():
             draw.text((text_x, text_y), f"{key}: {value}", fill="black", font=font)
             text_y += line_spacing
@@ -133,8 +133,13 @@ def create_combined_image(image_path, k=6):
     new_image.save("final_output.jpg")
     new_image.show()
 
-# Query user for the image path
+# Query user for the image path and number of colors
 image_path = input("Enter the path to your image file: ")
+try:
+    k = int(input("Enter the number of colors you want in the palette: "))
+except ValueError:
+    print("Invalid input. Using default of 6 colors.")
+    k = 6
 
 # Create and display the combined image with the desired modifications
-create_combined_image(image_path, k=6)
+create_combined_image(image_path, k=k)
